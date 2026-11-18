@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#123c35">
+    <title>Susu Circle</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Susu Circle home">
+        <span class="brand-mark" aria-hidden="true">SC</span>
+        <span>Susu Circle</span>
+      </a>
+      <span class="tagline">Save together, one round at a time.</span>
+    </header>
+
+    <main>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+
+      <section id="authPanel" class="auth-panel" aria-labelledby="authTitle">
+        <p class="eyebrow">COMMUNITY SAVINGS</p>
+        <h1 id="authTitle">Welcome back</h1>
+        <p id="authDescription" class="muted">Sign in to see your circles and contributions.</p>
+
+        <form id="loginForm">
+          <label for="loginEmail">Email</label>
+          <input id="loginEmail" name="email" type="email" autocomplete="email" required>
+          <label for="loginPassword">Password</label>
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+          <button type="submit">Sign in</button>
+        </form>
+
+        <form id="registerForm" hidden>
+          <label for="registerName">Your name</label>
+          <input id="registerName" name="name" autocomplete="name" minlength="2" maxlength="60" required>
+          <label for="registerEmail">Email</label>
+          <input id="registerEmail" name="email" type="email" autocomplete="email" required>
+          <label for="registerPassword">Password</label>
+          <input id="registerPassword" name="password" type="password" autocomplete="new-password" minlength="10" required>
+          <p class="field-help">Use at least 10 characters.</p>
+          <button type="submit">Create account</button>
+        </form>
+
+        <button id="authToggle" class="text-button" type="button">Need an account? Sign up</button>
+      </section>
+
+      <section id="appPanel" hidden>
+        <div class="welcome-row">
+          <div>
+            <p class="eyebrow">YOUR SAVINGS SPACE</p>
+            <h1>Your circles</h1>
+            <p id="welcomeText" class="muted"></p>
+          </div>
+          <button id="logoutButton" class="button-secondary" type="button">Sign out</button>
+        </div>
+
+        <div class="workspace-grid">
+          <aside class="sidebar">
+            <section class="card">
+              <h2>Create a circle</h2>
+              <form id="createGroupForm">
+                <label for="groupName">Circle name</label>
+                <input id="groupName" name="name" maxlength="60" required>
+                <label for="contributionAmount">Contribution per round</label>
+                <input id="contributionAmount" name="contributionAmount" type="number" min="1" step="1" required>
+                <button type="submit">Create circle</button>
+              </form>
+            </section>
+
+            <section class="card">
+              <h2>Join a circle</h2>
+              <form id="joinGroupForm">
+                <label for="inviteCode">Invite code</label>
+                <input id="inviteCode" name="inviteCode" autocomplete="off" required>
+                <button type="submit" class="button-secondary">Join circle</button>
+              </form>
+            </section>
+
+            <section class="card">
+              <h2>Your circles</h2>
+              <ul id="groupList" class="group-list"></ul>
+            </section>
+          </aside>
+
+          <section id="groupPanel" class="card group-panel" aria-live="polite">
+            <div class="empty-state">
+              <span class="empty-mark" aria-hidden="true">+</span>
+              <h2>Start with a circle</h2>
+              <p>Create a circle or join one with an invite code to see its schedule.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <p class="footer-copy">Susu Circle tracks contributions and payout turns; it does not move money.</p>
+    </footer>
+  </body>
+</html>

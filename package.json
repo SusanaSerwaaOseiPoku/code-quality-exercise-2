@@ -1,13 +1,30 @@
 {
-  "name": "susu-types",
+  "name": "susu-circle-milestone",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/src/server.js",
     "typecheck": "tsc --noEmit",
-    "susu": "tsx susu.ts"
+    "test": "tsx --test test/api.test.ts",
+    "lint": "biome check ."
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "dotenv": "^17.2.2",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0"
   },
   "devDependencies": {
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "@biomejs/biome": "^2.6.8",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.15.30",
+    "@types/supertest": "^6.0.3",
+    "supertest": "^7.1.4",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.3"
   }
 }

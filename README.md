@@ -1,32 +1,74 @@
-# Susu Circle: TypeScript Types
+# Susu Circle — Milestone 1
 
-This folder is a standalone TypeScript practice project. It uses `typescript` to check the code, `tsx` to run it, and strict type-checking is enabled in `tsconfig.json`.
+A small web app for organizing rotating savings circles. Members can create a circle, invite members, record each round's contributions, and track the payout order. The app records activity; it does **not** transfer, hold, or process money.
 
-Run the sample:
+## Submission links and status
 
-```bash
-npm run susu
+- GitHub repository: https://github.com/SusanaSerwaaOseiPoku/susu-circle-milestone
+- Live site: **Pending deployment**
+- Live API health check: **Pending deployment** (`/health`)
+
+The app has been exercised locally, but it is not publicly deployed yet. Do not present a localhost URL as the live site. Deployment needs a host with persistent storage for SQLite and HTTPS.
+
+## Run locally
+
+Requirements: Node.js 20 or newer and npm.
+
+```powershell
+npm ci
+Copy-Item .env.example .env
 ```
 
-Check types without generating files:
+Set `SESSION_SECRET` in `.env` to a private random value of at least 32 characters. For example, generate one with:
 
-```bash
-npx tsc --noEmit
+```powershell
+node -p "require('node:crypto').randomBytes(32).toString('hex')"
 ```
 
-## Types in plain words
+Keep `.env` private; only `.env.example` belongs in Git.
 
-- `PayoutStatus` only allows `"waiting"`, `"next"`, or `"paid"` for a member's payout position.
-- `Member` describes a person in the circle. Their `phone` is optional, and their payout position must use `PayoutStatus`.
-- `Group` describes a Susu circle, its contribution amount, and its members.
-- `Contribution` records one member's payment to a group, including the amount and date.
+```powershell
+npm run dev
+```
 
-`totalContributed` adds the amounts in a list of contributions. `findMember` may return `undefined`, so the example checks the result before reading the member's name. `membersWithStatus` filters members using a valid `PayoutStatus`.
+Open `http://localhost:3000`. The development server creates its SQLite database at `data/susu-circle.sqlite`.
 
-## Practice Notes
+## Checks
 
-An invalid `"pending"` payout status was corrected to `"waiting"` because `"pending"` is not in `PayoutStatus`.
+```powershell
+npm run typecheck
+npm test
+npm run lint
+npm run build
+npm audit
+```
 
-**Validation:** `npx tsc --noEmit` completed with no diagnostics.
+The API integration test covers health, registration, private-circle access, joining, contributions, payout progression, and logout. Capture and add separate screenshots of the passing test and lint results in `submission/evidence/` before calling the submission complete.
+The GitHub Actions workflow runs the typecheck, tests, lint, build, and dependency audit on pushes and pull requests.
 
-The `PayoutStatus` union restricts members to valid payout states, and the `if` check narrows `Member | undefined` before the code reads the member's name.
+## Main API routes
+
+- `GET /health` — database-backed health check.
+- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/me` — account and session actions.
+- `GET /api/groups`, `POST /api/groups`, `POST /api/groups/join`, `GET /api/groups/:groupId` — list, create, join, and view circles.
+- `POST /api/groups/:groupId/contributions` — record the signed-in member's contribution for the current round.
+- `POST /api/groups/:groupId/payouts` — circle owner records the round payout after all members contribute.
+
+Amounts are whole-number units with no currency conversion. Payout entries are records only and are not proof that money changed hands.
+
+## Security and deployment limits
+
+The app hashes passwords with scrypt, signs opaque session cookies, stores only session hashes, uses parameterized SQL, and restricts circle data to members. Production must use HTTPS and a strong private `SESSION_SECRET`. This class MVP is not a financial service or a production-ready money-handling system; a real launch would need a security review, operational controls, backups, monitoring, and appropriate legal and privacy review. SQLite also requires persistent storage on the chosen host.
+
+## Rehearsal and remaining personal work
+
+- [Five-minute demo script](submission/demo-script.md)
+- [Vibe Coding Log](submission/vibe-coding-log.md)
+- [Readiness checklist and self-score](submission/readiness-checklist.md)
+- [Reflection template](submission/reflection.md)
+
+The test accounts should be created by you during rehearsal using two distinct email addresses and passwords; there are no seeded or shared credentials. Make a backup recording, present to a partner with a timer, collect their feedback, and practice the demo a second time. These personal activities and evidence are not represented as completed by this repository.
+
+## Milestone 2 idea
+
+I would add opt-in reminders before each contribution deadline. This could help members stay on schedule and reduce the owner's follow-up work.

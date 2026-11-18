@@ -1,0 +1,28 @@
+{
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "**/*",
+      "!node_modules",
+      "!dist",
+      "!data",
+      "!package-lock.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  }
+}
