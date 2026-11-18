@@ -5,6 +5,7 @@ A small web app for organizing rotating savings circles. Members can create a ci
 ## Submission links and status
 
 - GitHub repository: https://github.com/SusanaSerwaaOseiPoku/susu-circle-milestone
+- Latest checks: [GitHub Actions run 1](https://github.com/SusanaSerwaaOseiPoku/susu-circle-milestone/actions/runs/44319457449) — typecheck, tests, lint, build, and dependency audit passed.
 - Live site: **Pending deployment**
 - Live API health check: **Pending deployment** (`/health`)
 
