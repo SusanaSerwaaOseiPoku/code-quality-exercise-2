@@ -76,6 +76,7 @@ export function verifyPassword(
   password: string,
 ): boolean {
   if (!user) {
+    // Keep unknown emails on the same expensive path to reduce account-enumeration timing clues.
     scryptSync(password, dummySalt, dummyHash.length);
     return false;
   }
@@ -90,6 +91,7 @@ export function verifyPassword(
 }
 
 function sessionHash(sessionId: string): string {
+  // A database read alone should not reveal a directly reusable session token.
   return createHash("sha256").update(sessionId).digest("hex");
 }
 
@@ -114,6 +116,7 @@ function getSessionId(req: Request, secret: string): string | undefined {
 
   const expectedSignature = Buffer.from(signature(sessionId, secret));
   const actualSignature = Buffer.from(suppliedSignature);
+  // Reject tampered cookie IDs before looking up a session in the database.
   if (
     expectedSignature.length !== actualSignature.length ||
     !timingSafeEqual(expectedSignature, actualSignature)

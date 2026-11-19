@@ -398,6 +398,7 @@ export function createApp({
     }
     const group = getGroupForMember(db, groupId, user.id);
     if (!group) {
+      // Use the same response for missing and non-member circles to avoid disclosing private IDs.
       return res.status(404).json({ error: "Circle not found" });
     }
     res.json({ group: createGroupResponse(db, group) });
@@ -511,6 +512,7 @@ export function createApp({
     }
     const paidAt = new Date().toISOString();
     const amount = group.contribution_amount * memberRows.length;
+    // Store the payout and advance the round atomically, so a partial write cannot replay a round.
     const recordPayout = db.transaction(() => {
       db.prepare(
         `INSERT INTO payouts (group_id, recipient_id, round_number, amount, paid_at)
