@@ -120,7 +120,8 @@ label {
   font-weight: 650;
 }
 
-input {
+input,
+select {
   width: 100%;
   min-height: 42px;
   padding: 9px 11px;
@@ -131,9 +132,30 @@ input {
   font: inherit;
 }
 
-input:focus {
+input:focus,
+select:focus {
   border-color: #3c7565;
   outline: 3px solid rgb(60 117 101 / 17%);
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: #b42318;
+}
+
+.form-field {
+  display: grid;
+  gap: 5px;
+}
+
+.field-error {
+  margin: 0;
+  color: #a22d2d;
+  font-size: 0.82rem;
+}
+
+.field-error[hidden] {
+  display: none;
 }
 
 button {
@@ -342,6 +364,19 @@ button:disabled {
   margin-bottom: 20px;
 }
 
+.contribution-entry {
+  margin-bottom: 18px;
+}
+
+.contribution-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+
+.contribution-form button {
+  grid-column: 1 / -1;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -412,7 +447,8 @@ footer {
   }
 
   .workspace-grid,
-  .detail-grid {
+  .detail-grid,
+  .contribution-form {
     grid-template-columns: 1fr;
   }
 

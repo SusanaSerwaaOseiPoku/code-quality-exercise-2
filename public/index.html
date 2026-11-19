@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#123c35">
     <title>Susu Circle</title>
     <link rel="stylesheet" href="/styles.css">
-    <script src="/app.js" defer></script>
+    <script src="/app.js" type="module"></script>
   </head>
   <body>
     <header class="site-header">
@@ -60,13 +60,10 @@
         <div class="workspace-grid">
           <aside class="sidebar">
             <section class="card">
-              <h2>Create a circle</h2>
-              <form id="createGroupForm">
-                <label for="groupName">Circle name</label>
-                <input id="groupName" name="name" maxlength="60" required>
-                <label for="contributionAmount">Contribution per round</label>
-                <input id="contributionAmount" name="contributionAmount" type="number" min="1" step="1" required>
-                <button type="submit">Create circle</button>
+              <h2>Create a group</h2>
+              <form id="createGroupForm" novalidate>
+                <div id="createGroupFields"></div>
+                <button type="submit">Create group</button>
               </form>
             </section>
 

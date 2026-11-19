@@ -13,6 +13,8 @@ export type Group = {
   name: string;
   inviteCode: string;
   contributionAmount: number;
+  frequency: "weekly" | "monthly";
+  startDate: string;
   currentRound: number;
   ownerId: number;
   role: "owner" | "member";
@@ -28,6 +30,7 @@ export type Contribution = {
   groupId: number;
   memberId: number;
   amount: number;
+  contributionDate: string;
   round: number;
   createdAt: string;
 };

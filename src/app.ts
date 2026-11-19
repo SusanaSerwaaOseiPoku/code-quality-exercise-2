@@ -34,6 +34,8 @@ type GroupRow = {
   name: string;
   invite_code: string;
   contribution_amount: number;
+  frequency: "weekly" | "monthly";
+  start_date: string;
   current_round: number;
   role: "owner" | "member";
 };
@@ -62,6 +64,20 @@ function parseId(value: string): number | undefined {
   return Number.isSafeInteger(id) && id > 0 ? id : undefined;
 }
 
+function isDateOnly(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  );
+}
+
+function todayDateOnly(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function getGroupForMember(
   db: AppDatabase,
   groupId: number,
@@ -70,7 +86,7 @@ function getGroupForMember(
   return db
     .prepare(
       `SELECT g.id, g.owner_id, g.name, g.invite_code, g.contribution_amount,
-              g.current_round, gm.role
+              g.frequency, g.start_date, g.current_round, gm.role
        FROM groups g
        JOIN group_members gm ON gm.group_id = g.id
        WHERE g.id = ? AND gm.user_id = ?`,
@@ -136,6 +152,7 @@ function createGroupResponse(
   const contributionRows = db
     .prepare(
       `SELECT id, group_id AS groupId, user_id AS memberId, amount,
+              contribution_date AS contributionDate,
               round_number AS round, created_at AS createdAt
        FROM contributions WHERE group_id = ? ORDER BY id DESC LIMIT 30`,
     )
@@ -161,6 +178,8 @@ function createGroupResponse(
     name: group.name,
     inviteCode: group.invite_code,
     contributionAmount: group.contribution_amount,
+    frequency: group.frequency,
+    startDate: group.start_date,
     currentRound: group.current_round,
     role: group.role,
     memberCount: members.length,
@@ -281,6 +300,7 @@ export function createApp({
       .prepare(
         `SELECT g.id, g.name, g.invite_code AS inviteCode,
                 g.contribution_amount AS contributionAmount,
+                g.frequency, g.start_date AS startDate,
                 g.current_round AS currentRound, gm.role,
                 (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id)
                   AS memberCount,
@@ -303,6 +323,8 @@ export function createApp({
     }
     const name = typeof req.body.name === "string" ? req.body.name.trim() : "";
     const contributionAmount = Number(req.body.contributionAmount);
+    const frequency = req.body.frequency;
+    const startDate = req.body.startDate;
     if (name.length < 3 || name.length > 60) {
       return res
         .status(400)
@@ -317,6 +339,14 @@ export function createApp({
         error: "Contribution must be a whole amount from 1 to 1000000",
       });
     }
+    if (frequency !== "weekly" && frequency !== "monthly") {
+      return res
+        .status(400)
+        .json({ error: "Choose weekly or monthly frequency" });
+    }
+    if (!isDateOnly(startDate)) {
+      return res.status(400).json({ error: "Enter a valid start date" });
+    }
 
     const inviteCode = randomBytes(6).toString("hex").toUpperCase();
     const createdAt = new Date().toISOString();
@@ -324,10 +354,19 @@ export function createApp({
       const result = db
         .prepare(
           `INSERT INTO groups
-             (owner_id, name, invite_code, contribution_amount, created_at)
-           VALUES (?, ?, ?, ?, ?)`,
+             (owner_id, name, invite_code, contribution_amount, frequency,
+              start_date, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
         )
-        .run(user.id, name, inviteCode, contributionAmount, createdAt);
+        .run(
+          user.id,
+          name,
+          inviteCode,
+          contributionAmount,
+          frequency,
+          startDate,
+          createdAt,
+        );
       const groupId = Number(result.lastInsertRowid);
       db.prepare(
         `INSERT INTO group_members (group_id, user_id, payout_order, role, joined_at)
@@ -417,18 +456,52 @@ export function createApp({
     if (!group) {
       return res.status(404).json({ error: "Circle not found" });
     }
-    const amount = isRecord(req.body) ? Number(req.body.amount) : NaN;
+    if (!isRecord(req.body)) {
+      return res
+        .status(400)
+        .json({ error: "Contribution details are required" });
+    }
+    const memberId = Number(req.body.memberId);
+    if (!Number.isSafeInteger(memberId) || memberId < 1) {
+      return res.status(400).json({ error: "Choose a circle member" });
+    }
+    const amount = Number(req.body.amount);
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      return res.status(400).json({
+        error: "Contribution must be a whole amount greater than zero",
+      });
+    }
     if (amount !== group.contribution_amount) {
       return res
         .status(400)
         .json({ error: "Contribution must match the circle amount" });
+    }
+    const contributionDate = req.body.date;
+    if (!isDateOnly(contributionDate)) {
+      return res.status(400).json({ error: "Enter a valid contribution date" });
+    }
+    if (contributionDate > todayDateOnly()) {
+      return res
+        .status(400)
+        .json({ error: "Contribution date cannot be in the future" });
+    }
+    const targetMember = db
+      .prepare("SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?")
+      .get(groupId, memberId);
+    if (!targetMember) {
+      return res.status(400).json({ error: "Choose a member of this circle" });
+    }
+    if (memberId !== user.id && group.role !== "owner") {
+      return res
+        .status(403)
+        .json({ error: "Only the circle owner can record for another member" });
     }
     const existing = db
       .prepare(
         `SELECT 1 FROM contributions
          WHERE group_id = ? AND user_id = ? AND round_number = ?`,
       )
-      .get(groupId, user.id, group.current_round);
+      .get(groupId, memberId, group.current_round);
     if (existing) {
       return res
         .status(409)
@@ -438,15 +511,24 @@ export function createApp({
     const createdAt = new Date().toISOString();
     const result = db
       .prepare(
-        `INSERT INTO contributions (group_id, user_id, round_number, amount, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO contributions
+           (group_id, user_id, round_number, amount, contribution_date, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(groupId, user.id, group.current_round, amount, createdAt);
+      .run(
+        groupId,
+        memberId,
+        group.current_round,
+        amount,
+        contributionDate,
+        createdAt,
+      );
     const contribution: Contribution = {
       id: Number(result.lastInsertRowid),
       groupId,
-      memberId: user.id,
+      memberId,
       amount,
+      contributionDate,
       round: group.current_round,
       createdAt,
     };
@@ -537,6 +619,16 @@ export function createApp({
   app.use("/api/groups", groups);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
+  });
+  app.get("/groups/:groupId", (req, res, next) => {
+    if (!parseId(req.params.groupId)) {
+      return res.status(404).send("Circle page not found");
+    }
+    res.sendFile(resolve(process.cwd(), "public/index.html"), (error) => {
+      if (error) {
+        next(error);
+      }
+    });
   });
   app.use(express.static(resolve(process.cwd(), "public")));
   app.use(

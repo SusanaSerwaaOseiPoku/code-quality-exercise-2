@@ -26,6 +26,8 @@ const schema = `
     name TEXT NOT NULL,
     invite_code TEXT NOT NULL UNIQUE,
     contribution_amount INTEGER NOT NULL CHECK (contribution_amount > 0),
+    frequency TEXT NOT NULL CHECK (frequency IN ('weekly', 'monthly')),
+    start_date TEXT NOT NULL,
     current_round INTEGER NOT NULL DEFAULT 1 CHECK (current_round > 0),
     created_at TEXT NOT NULL
   );
@@ -46,6 +48,7 @@ const schema = `
     user_id INTEGER NOT NULL,
     round_number INTEGER NOT NULL CHECK (round_number > 0),
     amount INTEGER NOT NULL CHECK (amount > 0),
+    contribution_date TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE (group_id, user_id, round_number),
     FOREIGN KEY (group_id, user_id)
@@ -73,5 +76,35 @@ export function createDatabase(filePath: string): AppDatabase {
   const db = new Database(filePath);
   db.pragma("foreign_keys = ON");
   db.exec(schema);
+
+  const groupColumns = db.pragma("table_info(groups)") as { name: string }[];
+  if (!groupColumns.some((column) => column.name === "frequency")) {
+    db.exec(
+      "ALTER TABLE groups ADD COLUMN frequency TEXT NOT NULL DEFAULT 'weekly' CHECK (frequency IN ('weekly', 'monthly'))",
+    );
+  }
+  if (!groupColumns.some((column) => column.name === "start_date")) {
+    db.exec(
+      "ALTER TABLE groups ADD COLUMN start_date TEXT NOT NULL DEFAULT '1970-01-01'",
+    );
+    db.exec(
+      "UPDATE groups SET start_date = substr(created_at, 1, 10) WHERE start_date = '1970-01-01'",
+    );
+  }
+
+  const contributionColumns = db.pragma("table_info(contributions)") as {
+    name: string;
+  }[];
+  if (
+    !contributionColumns.some((column) => column.name === "contribution_date")
+  ) {
+    db.exec(
+      "ALTER TABLE contributions ADD COLUMN contribution_date TEXT NOT NULL DEFAULT '1970-01-01'",
+    );
+    db.exec(
+      "UPDATE contributions SET contribution_date = substr(created_at, 1, 10) WHERE contribution_date = '1970-01-01'",
+    );
+  }
+
   return db;
 }

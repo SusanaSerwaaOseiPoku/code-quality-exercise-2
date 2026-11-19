@@ -1,3 +1,6 @@
+import { Field } from "./field.js";
+import { validateContribution, validateCreateGroup } from "./validation.js";
+
 const authPanel = document.querySelector("#authPanel");
 const appPanel = document.querySelector("#appPanel");
 const statusMessage = document.querySelector("#status");
@@ -5,6 +8,7 @@ const loginForm = document.querySelector("#loginForm");
 const registerForm = document.querySelector("#registerForm");
 const groupList = document.querySelector("#groupList");
 const groupPanel = document.querySelector("#groupPanel");
+const createGroupForm = document.querySelector("#createGroupForm");
 let selectedGroupId;
 let currentUser;
 
@@ -57,13 +61,111 @@ function node(tag, className, text) {
   return element;
 }
 
-async function loadGroups(preferredGroupId) {
+function todayDateOnly() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function defaultGroupValues() {
+  return {
+    name: "",
+    contributionAmount: "",
+    frequency: "weekly",
+    startDate: todayDateOnly(),
+  };
+}
+
+function mountFields(container, definitions, getValues, setValues) {
+  const fields = {};
+  for (const definition of definitions) {
+    const field = Field({
+      ...definition,
+      value: getValues()[definition.name],
+    });
+    const updateValue = () => {
+      setValues({
+        ...getValues(),
+        [definition.name]: field.control.value,
+      });
+      field.setError("");
+    };
+    field.control.addEventListener("input", updateValue);
+    field.control.addEventListener("change", updateValue);
+    container.append(field.element);
+    fields[definition.name] = field;
+  }
+  return fields;
+}
+
+function setFieldErrors(fields, errors) {
+  for (const [name, field] of Object.entries(fields)) {
+    field.setError(errors[name] || "");
+  }
+}
+
+function resetForm(form, fields, values) {
+  form.reset();
+  for (const [name, field] of Object.entries(fields)) {
+    field.setValue(values[name]);
+    field.setError("");
+  }
+}
+
+let createGroupValues = defaultGroupValues();
+const createGroupFieldRefs = mountFields(
+  document.querySelector("#createGroupFields"),
+  [
+    { id: "group-name", label: "Group name", name: "name", required: true },
+    {
+      id: "group-amount",
+      label: "Contribution amount per member",
+      name: "contributionAmount",
+      type: "number",
+      min: 1,
+      max: 1_000_000,
+      step: 1,
+      required: true,
+    },
+    {
+      id: "group-frequency",
+      label: "Frequency",
+      name: "frequency",
+      type: "select",
+      required: true,
+      options: [
+        { value: "weekly", label: "Weekly" },
+        { value: "monthly", label: "Monthly" },
+      ],
+    },
+    {
+      id: "group-start-date",
+      label: "Start date",
+      name: "startDate",
+      type: "date",
+      required: true,
+    },
+  ],
+  () => createGroupValues,
+  (values) => {
+    createGroupValues = values;
+  },
+);
+createGroupForm.noValidate = true;
+
+function groupIdFromPath() {
+  const match = window.location.pathname.match(/^\/groups\/(\d+)\/?$/);
+  return match ? Number(match[1]) : undefined;
+}
+
+async function loadGroups(preferredGroupId, { navigate = true } = {}) {
   const result = await api("/api/groups");
   groupList.replaceChildren();
   if (result.groups.length === 0) {
     groupList.append(node("li", "muted", "No circles yet."));
     selectedGroupId = undefined;
     groupPanel.replaceChildren();
+    if (window.location.pathname !== "/") {
+      window.history.replaceState({}, "", "/");
+    }
     const empty = node("div", "empty-state");
     empty.append(
       node("span", "empty-mark", "+"),
@@ -86,7 +188,9 @@ async function loadGroups(preferredGroupId) {
       "aria-current",
       String(group.id === (preferredGroupId ?? selectedGroupId)),
     );
-    button.addEventListener("click", () => loadGroup(group.id));
+    button.addEventListener("click", () => {
+      loadGroup(group.id).catch((error) => showStatus(error.message, true));
+    });
     item.append(
       button,
       node(
@@ -98,9 +202,12 @@ async function loadGroups(preferredGroupId) {
     groupList.append(item);
   }
 
-  const nextId = preferredGroupId ?? selectedGroupId ?? result.groups[0].id;
+  const requestedId = preferredGroupId ?? selectedGroupId;
+  const nextId = result.groups.some((group) => group.id === requestedId)
+    ? requestedId
+    : result.groups[0].id;
   selectedGroupId = nextId;
-  await loadGroup(nextId);
+  await loadGroup(nextId, { navigate });
 }
 
 function renderGroup(group) {
@@ -117,7 +224,7 @@ function renderGroup(group) {
     node(
       "p",
       "muted",
-      `Round ${group.currentRound} · ${group.contributionAmount} per member`,
+      `Round ${group.currentRound} · ${group.contributionAmount} per member · ${group.frequency}, starting ${group.startDate}`,
     ),
   );
   const invite = node("div", "invite-code");
@@ -142,32 +249,15 @@ function renderGroup(group) {
   const currentRoundContributions = group.contributions.filter(
     (contribution) => contribution.round === group.currentRound,
   );
-  const ownContribution = currentRoundContributions.some(
-    (contribution) => contribution.memberId === currentUser.id,
+  const contributedMemberIds = new Set(
+    currentRoundContributions.map((contribution) => contribution.memberId),
   );
-  const contributionButton = node(
-    "button",
-    ownContribution ? "button-secondary" : "",
-    ownContribution
-      ? "Contribution recorded"
-      : `Record my contribution (${group.contributionAmount})`,
+  const eligibleMembers = group.members.filter(
+    (member) =>
+      !contributedMemberIds.has(member.id) &&
+      (group.role === "owner" || member.id === currentUser.id),
   );
-  contributionButton.type = "button";
-  contributionButton.disabled = ownContribution;
-  contributionButton.addEventListener("click", async () => {
-    try {
-      await api(`/api/groups/${group.id}/contributions`, {
-        method: "POST",
-        body: JSON.stringify({ amount: group.contributionAmount }),
-      });
-      showStatus("Contribution recorded for this round.");
-      await loadGroup(group.id);
-      await loadGroups(group.id);
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
-  actions.append(contributionButton);
+  const contributionForm = createContributionForm(group, eligibleMembers);
 
   if (group.role === "owner") {
     const payoutButton = node("button", "button-secondary", "Record payout");
@@ -223,7 +313,7 @@ function renderGroup(group) {
       node(
         "li",
         "",
-        `Round ${contribution.round}: ${member?.name || "Member"} recorded ${contribution.amount}`,
+        `Round ${contribution.round}: ${member?.name || "Member"} recorded ${contribution.amount} on ${contribution.contributionDate}`,
       ),
     );
   }
@@ -242,7 +332,7 @@ function renderGroup(group) {
   activitySection.append(activity);
   columns.append(membersSection, activitySection);
 
-  groupPanel.append(header, summary, actions, columns);
+  groupPanel.append(header, summary, contributionForm, actions, columns);
 }
 
 function summaryCard(label, value) {
@@ -251,10 +341,111 @@ function summaryCard(label, value) {
   return card;
 }
 
-async function loadGroup(groupId) {
+function createContributionForm(group, eligibleMembers) {
+  const section = node("section", "detail-card contribution-entry");
+  section.append(node("h3", "", "Record contribution"));
+  if (eligibleMembers.length === 0) {
+    section.append(
+      node(
+        "p",
+        "muted",
+        group.role === "owner"
+          ? "Every group member has contributed this round."
+          : "Your contribution is already recorded for this round.",
+      ),
+    );
+    return section;
+  }
+
+  const form = node("form", "contribution-form");
+  form.noValidate = true;
+  let values = {
+    memberId: String(eligibleMembers[0].id),
+    amount: String(group.contributionAmount),
+    date: todayDateOnly(),
+  };
+  const fields = mountFields(
+    form,
+    [
+      {
+        id: `contribution-member-${group.id}`,
+        label: "Member",
+        name: "memberId",
+        type: "select",
+        required: true,
+        options: eligibleMembers.map((member) => ({
+          value: String(member.id),
+          label: member.name,
+        })),
+      },
+      {
+        id: `contribution-amount-${group.id}`,
+        label: "Amount",
+        name: "amount",
+        type: "number",
+        min: 1,
+        max: 1_000_000,
+        step: 1,
+        required: true,
+      },
+      {
+        id: `contribution-date-${group.id}`,
+        label: "Contribution date",
+        name: "date",
+        type: "date",
+        required: true,
+      },
+    ],
+    () => values,
+    (nextValues) => {
+      values = nextValues;
+    },
+  );
+  const submit = node("button", "", "Record contribution");
+  submit.type = "submit";
+  form.append(submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const errors = validateContribution(values, group.contributionAmount);
+    setFieldErrors(fields, errors);
+    if (Object.keys(errors).length > 0) return;
+
+    submit.disabled = true;
+    try {
+      await api(`/api/groups/${group.id}/contributions`, {
+        method: "POST",
+        body: JSON.stringify({
+          memberId: Number(values.memberId),
+          amount: Number(values.amount),
+          date: values.date,
+        }),
+      });
+      values = {
+        memberId: String(eligibleMembers[0].id),
+        amount: String(group.contributionAmount),
+        date: todayDateOnly(),
+      };
+      resetForm(form, fields, values);
+      showStatus("Contribution recorded for this round.");
+      await loadGroups(group.id);
+    } catch (error) {
+      showStatus(error.message, true);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+  section.append(form);
+  return section;
+}
+
+async function loadGroup(groupId, { navigate = true } = {}) {
   const result = await api(`/api/groups/${groupId}`);
   selectedGroupId = groupId;
   renderGroup(result.group);
+  const path = `/groups/${groupId}`;
+  if (navigate && window.location.pathname !== path) {
+    window.history.pushState({ groupId }, "", path);
+  }
 }
 
 async function authenticate(path, form) {
@@ -265,7 +456,7 @@ async function authenticate(path, form) {
     body: JSON.stringify(payload),
   });
   showApp(result.user);
-  await loadGroups();
+  await loadGroups(groupIdFromPath());
   form.reset();
   showStatus("You are signed in.");
 }
@@ -304,24 +495,30 @@ document.querySelector("#authToggle").addEventListener("click", () => {
   showStatus("");
 });
 
-document
-  .querySelector("#createGroupForm")
-  .addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    try {
-      const result = await api("/api/groups", {
-        method: "POST",
-        body: JSON.stringify(Object.fromEntries(formData.entries())),
-      });
-      form.reset();
-      showStatus(`Circle created. Invite code: ${result.group.inviteCode}`);
-      await loadGroups(result.group.id);
-    } catch (error) {
-      showStatus(error.message, true);
-    }
-  });
+createGroupForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const errors = validateCreateGroup(createGroupValues);
+  setFieldErrors(createGroupFieldRefs, errors);
+  if (Object.keys(errors).length > 0) return;
+
+  const submit = createGroupForm.querySelector('button[type="submit"]');
+  submit.disabled = true;
+  try {
+    const result = await api("/api/groups", {
+      method: "POST",
+      body: JSON.stringify(createGroupValues),
+    });
+    createGroupForm.reset();
+    createGroupValues = defaultGroupValues();
+    resetForm(createGroupForm, createGroupFieldRefs, createGroupValues);
+    showStatus(`Group created. Invite code: ${result.group.inviteCode}`);
+    await loadGroups(result.group.id);
+  } catch (error) {
+    showStatus(error.message, true);
+  } finally {
+    submit.disabled = false;
+  }
+});
 
 document
   .querySelector("#joinGroupForm")
@@ -346,6 +543,7 @@ document.querySelector("#logoutButton").addEventListener("click", async () => {
   try {
     await api("/api/auth/logout", { method: "POST" });
     showAuth();
+    window.history.replaceState({}, "", "/");
     showStatus("You have signed out.");
   } catch (error) {
     showStatus(error.message, true);
@@ -356,7 +554,8 @@ async function initialize() {
   try {
     const result = await api("/api/me");
     showApp(result.user);
-    await loadGroups();
+    const groupId = groupIdFromPath();
+    await loadGroups(groupId, { navigate: Boolean(groupId) });
   } catch (error) {
     if (error.status === 401) {
       showAuth();
@@ -365,5 +564,11 @@ async function initialize() {
     showStatus(error.message, true);
   }
 }
+
+window.addEventListener("popstate", () => {
+  loadGroups(groupIdFromPath(), { navigate: false }).catch((error) => {
+    showStatus(error.message, true);
+  });
+});
 
 initialize();
